@@ -1,0 +1,279 @@
+---
+title: "PROMIS_final_analysis"
+output: html_document
+---
+
+# Loading in data and packages
+## w/ note on jittering
+```{r}
+# Load in attached file
+df <- read.csv("josh data.csv", header=T, as.is = T)
+
+df <- df[-50,] # PRO050 is missing CHAQ pain
+
+library(tidyverse)
+library(RVAideMemoire)
+
+#ggplot(df, aes(x=chaq_score, y=promis_mobility)) +
+#  geom_point()
+
+#ggplot(df, aes(x=chaq_score, y=cjadas10)) +
+#  geom_jitter() +
+#  theme_bw()
+
+
+#cor1 = cor.test(df$chaq_score, df$cjadas10, method = "pearson", na.rm=T)
+#str(cor1)
+#cor1$conf.int[1:2]
+```
+
+# Write function to make PRO correlation plots
+```{r}
+# function to make plot with correlation on graph
+pro.plot <- function(df, x, y, title, ylab, xlab) {
+  
+  # function to calculate correlation
+  corr_eqn <- function(x,y, digits = 2) {
+  corr_coef <- round(cor(x, y, method = ("spearman")), digits = digits)
+  paste("italic(r) == ", corr_coef)
+  }
+  
+cor(df$promis_mobility, df$chaq_score, method = "spearman")  
+  
+  # make label to put correlation coefficient on graph
+  label_r = data.frame(x = 40, y = 40, label = corr_eqn(x, y))
+  
+  # makes jittered plot
+  ggplot(df, aes(x = x, y = y)) +
+    geom_jitter() +
+    geom_smooth(method = "lm", se = FALSE, fullrange = TRUE) +
+    theme_classic() + 
+    ggtitle(title) + 
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(y = ylab, x = xlab) + 
+    geom_text(data = label_r, aes(x = x, y = y, label = label), parse = TRUE) +
+    theme(plot.title = element_text(size = 16, face = "bold"),
+          axis.title = element_text(size = 14, face = "bold"))
+  
+} 
+```
+
+# Plot PROMIS vs. CHAQ correlations
+```{r}
+png("corr_mobil.png", width = 5, height = 4, units = "in", res = 300)
+pro.plot(df, df$promis_mobility, df$chaq_score, "PROMIS Mobility vs. CHAQ DI", "PROMIS", "CHAQ")
+dev.off()
+
+png("corr_pa.png", width = 5, height = 4, units = "in", res = 300)
+pro.plot(df, df$promis_physical_activity, df$chaq_score, "PROMIS Physical Activity vs. CHAQ DI", "PROMIS", "CHAQ")
+dev.off()
+
+
+png("corr_pain.png", width = 5, height = 4, units = "in", res = 300)
+pro.plot(df, df$promis_pain, df$chaq_pain, "PROMIS Pain vs. CHAQ Pain", "PROMIS", "CHAQ")
+dev.off()
+
+print(mobil.v.chaq)
+print(pa.v.chaq)
+print(pain.v.chaq)
+```
+
+# Function for distribution of PROMIS scores
+```{r}
+# meant for all PROMIS and CHAQ Pain, CHAQ DI will require special code
+# function makes histogram
+pro.dist <- function(df, column, xlab, title, binwidth, ...){
+
+  ggplot(df, aes(column)) +
+    geom_histogram(binwidth = binwidth, color = "white", fill = "grey") +
+    theme_classic() +
+    ylim(0, 15) + 
+    xlab(xlab) +
+    ggtitle(title) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(plot.title=element_text(size=16, face = "bold"),
+          axis.title=element_text(size=14,face="bold"))
+  
+}
+```
+
+# PROMIS and CHAQ Pain score distributions
+```{r}
+# use function to make graphs
+
+png("mobil.png", width = 6, height = 4, units = "in", res = 300)
+pro.dist(df, df$promis_mobility, "PROMIS Mobility", "Distribution of PROMIS Mobility Scores", 4)
+dev.off()
+
+
+png("pa.png", width = 6, height = 4, units = "in", res = 300)
+pro.dist(df, df$promis_physical_activity, "PROMIS Physical Activity", "Distribution of PROMIS Physical Activity Scores", 3.5)
+dev.off()
+
+
+
+png("pain.png", width = 6, height = 4, units = "in", res = 300)
+pro.dist(df, df$promis_pain, "PROMIS Pain", "Distribution of PROMIS Pain Scores", 3.5)
+dev.off()
+
+
+png("chaq.png", width = 6, height = 4, units = "in", res = 300)
+pro.dist(df, df$chaq_pain, "CHAQ Pain", "Distribution of CHAQ Pain Scores", 3.5)
+dev.off()
+
+
+print(mobil.dist)
+print(pa.dist)
+print(pain.dist)
+print(chaq.dist)
+```
+
+# CHAQ DI distribution
+```{r}
+# turn CHAQ score column into data frame
+chaqdi <- data.frame(table(df$chaq_score))
+#chaqdi$Var1 = as.numeric(chaqdi$Var1)
+#View(chaqdi)
+
+# make barplot of CHAQ DI scores
+png("chaqdi.png", width = 5, height = 4, units = "in", res = 300)
+ggplot(chaqdi, aes(x = Var1, y = Freq)) +
+  geom_bar(stat = "identity", color="white", fill= "grey", width = 1) + 
+  theme_classic() +
+  scale_x_discrete(breaks = c(0,0.25,0.5,0.75,1,1.25,1.5,1.75,2)) +
+  xlab("CHAQ Disability Index Score") +
+  ylab("Count") +
+  ggtitle("Distribution of CHAQ DI Scores") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.title=element_text(size=16, face = "bold"), axis.title=element_text(size=14,face="bold"))
+dev.off()
+```
+
+# PRO/disease activity score calculations (w/ CI = 0.95)
+```{r}
+# make two data frames, one for each disease activity score
+das <- df %>% 
+  filter(diagnosis == 2)
+jadas <- df %>% 
+  filter(diagnosis == 1)
+
+# function to calculate all correlations betwee DASs and PROs
+pro.corr <- function(df, x, y, z, a, b, c){
+  print(spearman.ci(x, y, nrep = 1000, conf.level = 0.95))
+  print(spearman.ci(x, z, nrep = 1000, conf.level = 0.95))
+  print(spearman.ci(x, a, nrep = 1000, conf.level = 0.95))
+  print(spearman.ci(x, b, nrep = 1000, conf.level = 0.95))
+  print(spearman.ci(x, c, nrep = 1000, conf.level = 0.95))
+}
+```
+
+# correlation to DAS
+```{r}
+pro.corr(das, x = df$das_total, y = df$promis_mobility, z = df$promis_physical_activity, a = df$promis_pain, b = df$chaq_score, c = df$chaq_pain)
+```
+
+# correlation to cJADAS10
+```{r}
+pro.corr(jadas, x = df$cjadas10, y = df$promis_mobility, z = df$promis_physical_activity, a = df$promis_pain, b = df$chaq_score, c = df$chaq_pain)
+```
+
+# correlation matrix
+```{r} 
+# first, format for corrplot
+das.m <- das %>% 
+  select(das_total, promis_mobility, promis_physical_activity, promis_pain, chaq_score, chaq_pain)
+
+jadas.m <- jadas %>% 
+  select(cjadas10, promis_mobility, promis_physical_activity, promis_pain, chaq_score, chaq_pain)
+
+das.m1 <- cor(das.m, method = "spearman")
+das.m2 <- as.data.frame(das.m1)
+das.m3 <- das.m2 %>% select(das_total)
+das.m4 <- as.matrix(das.m3)
+
+jadas.m1 <- cor(jadas.m, method = "spearman")
+jadas.m2 <- as.data.frame(jadas.m1)
+jadas.m3 <- jadas.m2 %>% select(cjadas10)
+jadas.m4 <- as.matrix(jadas.m3)
+
+M <- cbind(das.m4, jadas.m4)
+M <- M[-1,]
+M <- cbind(M, c("-0.5814260-0.2685258", "-0.5544481-0.2907728", "-0.1868974-0.5319847", "-0.2520919-0.5548230", "-0.1274775-0.5681792"))
+M <- cbind(M, c("-0.4537250-0.3889582", "-0.4667037-0.3298201", "-0.2259422-0.6579604", "-0.1199413-0.7044855", "0.04120791-0.72238029"))
+
+colnames(M) <- c("DAS", "cJADAS10", "DAS 95% CI", "cJADAS10 95% CI")
+M <- M[,c(1,3,2,4)]
+print(M)
+```
+
+# Patient Preferences
+```{r}
+data_pref_question <- read.csv('pp_survey_format.csv')
+# made in excel using table function
+data_pref_overall <- read.csv('pref_only_format.csv')
+
+data_pref_question_percent <- data_pref_question %>% 
+  filter(question != "preference") %>% 
+  mutate(percent = round(freq/52 * 100, 1))
+
+data_pref_overall_percent <- data_pref_overall %>% 
+  mutate(percent = round(freq/52 * 100, 1))
+
+# these are backup objects
+pref_questions <- data_pref_question_percent
+pref_overall <- data_pref_overall_percent
+
+pref_overall$answer <- factor(pref_overall$answer, levels = c("The CHAQ", "The PROMIS", "I like both equally", "I dislike both equally", "No preference"))
+pref_questions$answer <- factor(pref_questions$answer, levels = c("Strongly Agree", "Agree", "Neither Agree or Disagree", "Disagree", "Strongly Disagree"))
+
+# Make bar graphs
+# Note this one labels bars with PERCENTS
+png("prefquestions.png", width = 6, height = 5, units = "in", res = 300)
+pref_questions %>% 
+  filter(question != "preference") %>% 
+  group_by(answer) %>% 
+  ggplot(aes(x = answer, y = percent, fill = answer)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ full_question) +
+  theme_classic() +
+  geom_text(aes(label = percent), position = position_dodge(0.9)) +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "none") + 
+  ggtitle("Patient Preference") +
+  labs(x = "Answer", y = "Percent") +
+  theme(plot.title=element_text(size=16, face = "bold"), axis.title=element_text(size=14,face="bold")) +
+  theme(panel.background = element_blank()) +
+  scale_fill_grey(start = 0.7, end = 0.1)
+dev.off()
+
+# One for overall preference cuz eveness 
+# Note this one labels bars with FREQUENCY
+png("pref_overall.png", width = 4, height = 4, units = "in", res = 300)
+pref_overall %>% 
+  filter(question == "preference") %>% 
+  mutate(percent = round(freq/52 * 100, 1)) %>% 
+  group_by(answer) %>%  
+  ggplot(aes(x = answer, y = percent, fill = answer)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  geom_text(aes(label = percent), position = position_dodge(0.9), vjust = -0.10) + 
+  theme(axis.text.x = element_text(angle = 20, hjust = 1, size = 10)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.title = element_text(size = 20)) +
+  theme(legend.position = "none") + 
+  labs(x = "Answer", y = "Percent") +
+  ggtitle("Preferred PRO") + 
+  theme(plot.title=element_text(size=25, face = "bold"), axis.title=element_text(size=14,face="bold")) +
+  scale_fill_grey(start = 0.7, end = 0.1)
+dev.off()
+```
+
+
+
+
+
+
+
+
+
